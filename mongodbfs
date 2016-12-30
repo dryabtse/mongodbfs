@@ -1,0 +1,159 @@
+#!/usr/bin/python
+
+import os
+import sys
+import re
+from getpass import getuser
+from datetime import datetime
+from pymongo import MongoClient
+from bson.json_util import dumps
+from bson.json_util import loads
+from bson import ObjectId
+
+DATE = datetime.now().strftime("%b %d %H:%M")
+USER = getuser()
+
+method = ""
+
+implemented_methods = [ 'list', 'copyout' ]
+
+def exitFatal(message, code=1):
+    print message
+    sys.exit(code)
+
+
+def getConnString(fileName):
+    try:
+        f = open(fileName, 'r')
+        cs = f.readline()
+    except IOError:
+        exitFatal("No such file or directory: " + fileName)
+    except:
+        print("Unexpected error:", sys.exc_info()[0])
+        raise
+
+    if (checkConnString(cs) == False):
+        exitFatal("The connection string is malformed: " + cs)
+
+    return cs.rstrip('\n')
+    
+    
+def checkConnString(cs):
+    # The connection string should follow the URI convention. For now let's just ensure it starts with "mongodb://"
+    if (re.search("^mongodb:\/\/", cs)):
+        return True
+    else:
+        return False
+
+def jsonPretty(jsonDoc):
+    return dumps(jsonDoc, sort_keys=True, indent=4, separators=(',', ': '))
+
+def printDbs(client):
+    dbs = client.database_names()
+    if(len(dbs) > 0):
+        for db in dbs:
+            print("dr--r--r--   1 " + USER + " " + USER + " 0 " + DATE + " " + db)
+            printColNames(client, db)
+
+def printColNames(client, db):
+    collections = client[db].collection_names()
+    for c in collections:
+        print("dr--r--r--   1 " + USER + " " + USER + " 0 " + DATE + " " + db + "/" + c)
+        printDocs(client, db, c)
+
+def printDocs(client, db, col):
+    # First let's print special access files 
+    for file in [ '.data', '.indices', '.stats']:
+         print("-r--r--r--   1 " + USER + " " + USER + " 0 " + DATE + " " + db + "/" + col + "/" + file)
+    
+    for doc in client[db][col].find(limit=1000, projection={'_id': 1}):
+        if(type(doc['_id']) is ObjectId):
+            date = oidToDate(doc['_id'])
+        else:
+            date = DATE
+        print("-r--r--r--   1 " + USER + " " + USER + " 0 " + date + " " + db + "/" + col + "/" + re.sub(r'\$oid', 'oid', dumps(doc['_id'])))
+
+
+def getRootDir(path):
+    dir = (os.path.dirname(path))
+    if (dir not in ["/", "", path]):
+        return getRootDir(os.path.dirname(path))
+    else:
+        return path
+    
+def printRoot(cs):
+    hashVal = hash(cs)
+    print("dr--r--r--   1 " + USER + " " + USER + " 0 " + DATE + " " + str(hashVal))
+    return hashVal
+
+def saveDoc(doc, outFilePath):
+    try:
+	outFile = open(outFilePath, 'w')
+	outFile.write(jsonPretty(doc))
+    except IOError:
+        exitFatal("No such file or directory: " + fileName)
+    except:
+        print("Unexpected error:", sys.exc_info()[0])
+        raise
+
+
+def unloadOne(col, doc, outFilePath):
+    saveDoc(col.find_one(filter=doc), outFilePath)
+
+def oidToDate(oid):
+    return oid.generation_time.strftime("%b %d %H:%M")
+
+def getCollectionStats(db, colName):
+    return db.command("collstats", colName)
+
+def getIndexes(db, colName):
+    return db[colName].index_information()
+
+def unloadCol(col, outFilePath):
+    outFile = open(outFilePath, 'w')
+    for doc in col.find(limit=10000):
+        outFile.write(jsonPretty(doc))
+    outFile.close()
+
+if (len(sys.argv) > 1):
+    method = sys.argv[1]
+else:
+    exitFatal("No arguments were supplied")
+    
+if (method not in implemented_methods ):
+    exitFatal("Method not implemented: " + method)
+    
+if (method == 'list'):
+    cs = getConnString(sys.argv[2]) 
+    client = MongoClient(cs)
+    printDbs(client)
+    
+if (method == 'copyout'):
+    fileName = sys.argv[2]
+    source = sys.argv[3]
+    dest = sys.argv[4]
+    oid = os.path.basename(source)
+    col = os.path.basename(os.path.dirname(source))
+    db = os.path.basename(os.path.dirname(os.path.dirname(source)))
+    cs = getConnString(fileName)
+    client = MongoClient(cs)
+
+    if ( oid in [ '.stats', '.indices', '.data', '.data_sample']):
+        if (oid == '.stats'):
+            doc = getCollectionStats(client[db], col)
+            saveDoc(doc, dest)
+        if (oid == '.indices'):
+            doc = getIndexes(client[db], col)
+            saveDoc(doc, dest)
+        if (oid == '.data'):
+            unloadCol(client[db][col], dest)
+    else:
+	    try:
+		doc = { '_id': loads(re.sub(r'oid', '$oid', oid)) }
+		unloadOne(client[db][col], doc, dest)
+	    except:
+		debug = open('/home/dmitry/mc_extfs/out', 'w')
+		debug.write(oid)
+		debug.write(dumps(sys.argv))
+		debug.close()
+		raise
