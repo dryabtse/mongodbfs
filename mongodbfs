@@ -63,10 +63,11 @@ def printColNames(client, db):
 
 def printDocs(client, db, col):
     # First let's print special access files 
-    for file in [ '.data', '.indices', '.stats']:
+    for file in [ '.data', '.indices', '.stats', '.data_sample']:
          print("-r--r--r--   1 " + USER + " " + USER + " 0 " + DATE + " " + db + "/" + col + "/" + file)
     
     for doc in client[db][col].find(limit=1000, projection={'_id': 1}):
+    # If the type of the '_id' field is ObjectId let's extract the datetime value and put it as the file's datetime
         if(type(doc['_id']) is ObjectId):
             date = oidToDate(doc['_id'])
         else:
@@ -109,11 +110,38 @@ def getCollectionStats(db, colName):
 def getIndexes(db, colName):
     return db[colName].index_information()
 
-def unloadCol(col, outFilePath):
+def unloadCol(col, outFilePath, lim=10000):
     outFile = open(outFilePath, 'w')
-    for doc in col.find(limit=10000):
+    for doc in col.find(limit=lim):
         outFile.write(jsonPretty(doc))
     outFile.close()
+
+def checkSampleSupport(db):
+    ver = str(db.command("buildinfo")['version'])
+    name = db.command("serverStatus")['storageEngine']['name']
+    if ((re.search("^3\.", ver) != None)  & (name == "wiredTiger")):
+        return True
+    else:
+        return False
+
+def getDataSample(db, colName, outFilePath):
+    count = db[colName].count()
+    num = count * 49 / 1000
+    
+    if (checkSampleSupport(db) == True):
+        try:
+	    outFile = open(outFilePath, 'w')
+	    for doc in db[colName].aggregate([{"$sample": { "size": num }}], useCursor = True):
+	        outFile.write(jsonPretty(doc))
+        except IOError:
+            exitFatal("No such file or directory: " + fileName)
+        except:
+            print("Unexpected error:", sys.exc_info()[0])
+            raise
+    else:
+       unloadCol(db[colName], outFilePath, num)
+    
+    
 
 if (len(sys.argv) > 1):
     method = sys.argv[1]
@@ -146,14 +174,16 @@ if (method == 'copyout'):
             doc = getIndexes(client[db], col)
             saveDoc(doc, dest)
         if (oid == '.data'):
-            unloadCol(client[db][col], dest)
+            unloadCol(client[db][col], dest, 0)
+        if (oid == '.data_sample'):
+            getDataSample(client[db], col, dest)
     else:
 	    try:
 		doc = { '_id': loads(re.sub(r'oid', '$oid', oid)) }
 		unloadOne(client[db][col], doc, dest)
 	    except:
-		debug = open('/home/dmitry/mc_extfs/out', 'w')
-		debug.write(oid)
-		debug.write(dumps(sys.argv))
-		debug.close()
+#		debug = open('/home/dmitry/mc_extfs/out', 'w')
+#		debug.write(oid)
+#		debug.write(dumps(sys.argv))
+#		debug.close()
 		raise
