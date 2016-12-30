@@ -1,6 +1,6 @@
 # mongodbfs
 
-## Installation
+## Installation (Linux)
 
 1) Install PyMongo
 
