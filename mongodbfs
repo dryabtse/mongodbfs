@@ -15,7 +15,8 @@ USER = getuser()
 
 method = ""
 
-implemented_methods = [ 'list', 'copyout' ]
+implemented_methods = ['list', 'copyout']
+
 
 def exitFatal(message, code=1):
     print message
@@ -32,21 +33,24 @@ def getConnString(fileName):
         print("Unexpected error:", sys.exc_info()[0])
         raise
 
-    if (checkConnString(cs) == False):
+    if (checkConnString(cs) is False):
         exitFatal("The connection string is malformed: " + cs)
 
     return cs.rstrip('\n')
-    
-    
+
+
 def checkConnString(cs):
-    # The connection string should follow the URI convention. For now let's just ensure it starts with "mongodb://"
+    # The connection string should follow the URI convention.
+    # For now let's just ensure it starts with "mongodb://"
     if (re.search("^mongodb:\/\/", cs)):
         return True
     else:
         return False
 
+
 def jsonPretty(jsonDoc):
     return dumps(jsonDoc, sort_keys=True, indent=4, separators=(',', ': '))
+
 
 def printDbs(client):
     dbs = client.database_names()
@@ -55,19 +59,21 @@ def printDbs(client):
             print("dr--r--r--   1 " + USER + " " + USER + " 0 " + DATE + " " + db)
             printColNames(client, db)
 
+
 def printColNames(client, db):
     collections = client[db].collection_names()
     for c in collections:
         print("dr--r--r--   1 " + USER + " " + USER + " 0 " + DATE + " " + db + "/" + c)
         printDocs(client, db, c)
 
+
 def printDocs(client, db, col):
-    # First let's print special access files 
-    for file in [ '.data', '.indices', '.stats', '.data_sample']:
-         print("-r--r--r--   1 " + USER + " " + USER + " 0 " + DATE + " " + db + "/" + col + "/" + file)
-    
+    # First let's print special access files
+    for file in ['.data', '.indices', '.stats', '.data_sample']:
+        print("-r--r--r--   1 " + USER + " " + USER + " 0 " + DATE + " " + db + "/" + col + "/" + file)
+
     for doc in client[db][col].find(limit=1000, projection={'_id': 1}):
-    # If the type of the '_id' field is ObjectId let's extract the datetime value and put it as the file's datetime
+        # If the type of the '_id' field is ObjectId let's extract the datetime value and put it as the file's datetime
         if(type(doc['_id']) is ObjectId):
             date = oidToDate(doc['_id'])
         else:
@@ -81,16 +87,12 @@ def getRootDir(path):
         return getRootDir(os.path.dirname(path))
     else:
         return path
-    
-def printRoot(cs):
-    hashVal = hash(cs)
-    print("dr--r--r--   1 " + USER + " " + USER + " 0 " + DATE + " " + str(hashVal))
-    return hashVal
+
 
 def saveDoc(doc, outFilePath):
     try:
-	outFile = open(outFilePath, 'w')
-	outFile.write(jsonPretty(doc))
+        outFile = open(outFilePath, 'w')
+        outFile.write(jsonPretty(doc))
     except IOError:
         exitFatal("No such file or directory: " + fileName)
     except:
@@ -101,14 +103,18 @@ def saveDoc(doc, outFilePath):
 def unloadOne(col, doc, outFilePath):
     saveDoc(col.find_one(filter=doc), outFilePath)
 
+
 def oidToDate(oid):
     return oid.generation_time.strftime("%b %d %H:%M")
+
 
 def getCollectionStats(db, colName):
     return db.command("collstats", colName)
 
+
 def getIndexes(db, colName):
     return db[colName].index_information()
+
 
 def unloadCol(col, outFilePath, lim=10000):
     outFile = open(outFilePath, 'w')
@@ -116,46 +122,47 @@ def unloadCol(col, outFilePath, lim=10000):
         outFile.write(jsonPretty(doc))
     outFile.close()
 
+
 def checkSampleSupport(db):
     ver = str(db.command("buildinfo")['version'])
     name = db.command("serverStatus")['storageEngine']['name']
-    if ((re.search("^3\.", ver) != None)  & (name == "wiredTiger")):
+    if ((re.search("^3\.", ver) is not None) & (name == "wiredTiger")):
         return True
     else:
         return False
 
+
 def getDataSample(db, colName, outFilePath):
     count = db[colName].count()
     num = count * 49 / 1000
-    
-    if (checkSampleSupport(db) == True):
+
+    if (checkSampleSupport(db) is True):
         try:
-	    outFile = open(outFilePath, 'w')
-	    for doc in db[colName].aggregate([{"$sample": { "size": num }}], useCursor = True):
-	        outFile.write(jsonPretty(doc))
+            outFile = open(outFilePath, 'w')
+            for doc in db[colName].aggregate([{"$sample": {"size": num}}], useCursor=True):
+                outFile.write(jsonPretty(doc))
         except IOError:
             exitFatal("No such file or directory: " + fileName)
         except:
             print("Unexpected error:", sys.exc_info()[0])
             raise
     else:
-       unloadCol(db[colName], outFilePath, num)
-    
-    
+        unloadCol(db[colName], outFilePath, num)
+
 
 if (len(sys.argv) > 1):
     method = sys.argv[1]
 else:
     exitFatal("No arguments were supplied")
-    
-if (method not in implemented_methods ):
+
+if (method not in implemented_methods):
     exitFatal("Method not implemented: " + method)
-    
+
 if (method == 'list'):
-    cs = getConnString(sys.argv[2]) 
+    cs = getConnString(sys.argv[2])
     client = MongoClient(cs)
     printDbs(client)
-    
+
 if (method == 'copyout'):
     fileName = sys.argv[2]
     source = sys.argv[3]
@@ -166,7 +173,7 @@ if (method == 'copyout'):
     cs = getConnString(fileName)
     client = MongoClient(cs)
 
-    if ( oid in [ '.stats', '.indices', '.data', '.data_sample']):
+    if (oid in ['.stats', '.indices', '.data', '.data_sample']):
         if (oid == '.stats'):
             doc = getCollectionStats(client[db], col)
             saveDoc(doc, dest)
@@ -178,12 +185,8 @@ if (method == 'copyout'):
         if (oid == '.data_sample'):
             getDataSample(client[db], col, dest)
     else:
-	    try:
-		doc = { '_id': loads(re.sub(r'oid', '$oid', oid)) }
-		unloadOne(client[db][col], doc, dest)
-	    except:
-#		debug = open('/home/dmitry/mc_extfs/out', 'w')
-#		debug.write(oid)
-#		debug.write(dumps(sys.argv))
-#		debug.close()
-		raise
+        try:
+            doc = {'_id': loads(re.sub(r'oid', '$oid', oid))}
+            unloadOne(client[db][col], doc, dest)
+        except:
+            raise
