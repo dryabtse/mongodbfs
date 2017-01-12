@@ -75,11 +75,10 @@ def printDocs(client, db, col):
     # TODO: it is not given that every document has an '_id' field (e.g. system.indexes on 3.4 with views configured)
     for doc in client[db][col].find(limit=1000, projection={'_id': 1}):
         # If the type of the '_id' field is ObjectId let's extract the datetime value and put it as the file's datetime
+        date = DATE
         if('_id' in doc):
             if(type(doc['_id']) is ObjectId):
                 date = oidToDate(doc['_id'])
-        else:
-            date = DATE
         print("-r--r--r--   1 " + USER + " " + USER + " 0 " + date + " " + db + "/" + col + "/" + re.sub(r'\$oid', 'oid', dumps(doc['_id'])))
 
 
