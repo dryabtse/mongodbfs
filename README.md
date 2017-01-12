@@ -20,4 +20,11 @@ regex/i/\.mongodb$
 
 ## Usage
 
-Create a `*.mongodb` file containing a MongoDB URI as a single string
+Create a `*.mongodb` file containing a MongoDB URI as a single string. For example
+
+```
+$ cat mubuntu.mongodb 
+mongodb://mubuntu:9088
+```
+
+You can then highlight the file by the cursor in `mc` and hit `Enter` - that should open the VFS.
