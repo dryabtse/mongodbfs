@@ -72,14 +72,15 @@ def printDocs(client, db, col):
     for file in ['.data', '.indices', '.stats', '.data_sample']:
         print("-r--r--r--   1 " + USER + " " + USER + " 0 " + DATE + " " + db + "/" + col + "/" + file)
 
+    if(col != 'system.indexes'):
     # TODO: it is not given that every document has an '_id' field (e.g. system.indexes on 3.4 with views configured)
-    for doc in client[db][col].find(limit=1000, projection={'_id': 1}):
-        # If the type of the '_id' field is ObjectId let's extract the datetime value and put it as the file's datetime
-        date = DATE
-        if('_id' in doc):
-            if(type(doc['_id']) is ObjectId):
-                date = oidToDate(doc['_id'])
-        print("-r--r--r--   1 " + USER + " " + USER + " 0 " + date + " " + db + "/" + col + "/" + re.sub(r'\$oid', 'oid', dumps(doc['_id'])))
+        for doc in client[db][col].find(limit=1000, projection={'_id': 1}):
+            # If the type of the '_id' field is ObjectId let's extract the datetime value and put it as the file's datetime
+            date = DATE
+            if('_id' in doc):
+                if(type(doc['_id']) is ObjectId):
+                    date = oidToDate(doc['_id'])
+            print("-r--r--r--   1 " + USER + " " + USER + " 0 " + date + " " + db + "/" + col + "/" + re.sub(r'\$oid', 'oid', dumps(doc['_id'])))
 
 
 def getRootDir(path):
@@ -191,3 +192,4 @@ if (method == 'copyout'):
             unloadOne(client[db][col], doc, dest)
         except:
             raise
+
